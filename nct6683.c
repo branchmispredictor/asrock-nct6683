@@ -22,6 +22,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/acpi.h>
+#include <linux/dmi.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -170,6 +171,7 @@ superio_exit(int ioreg)
 #define NCT6683_FAN_CFG_DONE		0x40
 
 #define NCT6683_REG_CUSTOMER_ID		0x602
+#define NCT6683_CUSTOMER_ID_UNKNOWN	0x000
 #define NCT6683_CUSTOMER_ID_INTEL	0x805
 #define NCT6683_CUSTOMER_ID_MITAC	0xa0e
 #define NCT6683_CUSTOMER_ID_MSI		0x201
@@ -188,6 +190,55 @@ superio_exit(int ioreg)
 
 #define NCT6683_REG_CR_BEEP		0xe0
 #define NCT6683_CR_BEEP_MASK		(1 << 6)
+
+enum customer_families {
+	family_unknown,
+	family_intel_generic,
+	family_mitac_generic,
+	family_msi_generic,
+	family_asrock_generic,
+	family_asrock_generic2,
+};
+
+struct customer_family_matcher {
+	struct dmi_match {
+		bool enabled;
+		char board_vendor[79];
+		char board_name[79];
+	} dmi_match;
+	u16 customer_id_match;
+	enum customer_families family;
+};
+
+#define CUSTOMER_MATCHES_DMI_BOARD(_board_vendor, _board_name, _family)        \
+	{                                                                      \
+		.dmi_match = {                                                 \
+			.enabled = true,                                       \
+			.board_vendor = _board_vendor,                         \
+			.board_name = _board_name,                             \
+		},                                                             \
+		.family = _family,                                             \
+	}
+
+#define CUSTOMER_MATCHES_CUSTOMER_ID(customer_id, _family)                     \
+	{                                                                      \
+		.customer_id_match = _customer_id,                             \
+		.family = _family,                                             \
+	}
+
+static const struct customer_family_matcher customer_family_table[] = {
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_INTEL,
+				     family_intel_generic),
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_MITAC,
+				     family_mitac_generic),
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_MSI,
+				     family_msi_generic),
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK,
+				     family_asrock_generic),
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK2,
+				     family_asrock_generic2),
+	{ .family = family_unknown },
+};
 
 static const char *const nct6683_mon_label[] = {
 	NULL,	/* disabled */
@@ -299,7 +350,7 @@ struct nct6683_data {
 	int addr;		/* IO base of EC space */
 	int sioreg;		/* SIO register */
 	enum kinds kind;
-	u16 customer_id;
+	enum customer_families customer_family;
 
 	struct device *hwmon_dev;
 	const struct attribute_group *groups[6];
@@ -527,11 +578,11 @@ static int get_in_reg(struct nct6683_data *data, int nr, int index)
 		reg = NCT6683_REG_MON(ch);
 		break;
 	case 1:
-		if (data->customer_id != NCT6683_CUSTOMER_ID_INTEL)
+		if (data->customer_family != family_intel_generic)
 			reg = NCT6683_REG_MON_LOW(ch);
 		break;
 	case 2:
-		if (data->customer_id != NCT6683_CUSTOMER_ID_INTEL)
+		if (data->customer_family != family_intel_generic)
 			reg = NCT6683_REG_MON_HIGH(ch);
 		break;
 	default:
@@ -545,8 +596,8 @@ static int get_temp_reg(struct nct6683_data *data, int nr, int index)
 	int ch = data->temp_index[index];
 	int reg = -EINVAL;
 
-	switch (data->customer_id) {
-	case NCT6683_CUSTOMER_ID_INTEL:
+	switch (data->customer_family) {
+	case family_intel_generic:
 		switch (nr) {
 		default:
 		case 1:	/* max */
@@ -557,7 +608,7 @@ static int get_temp_reg(struct nct6683_data *data, int nr, int index)
 			break;
 		}
 		break;
-	case NCT6683_CUSTOMER_ID_MITAC:
+	case family_mitac_generic:
 	default:
 		switch (nr) {
 		default:
@@ -683,7 +734,7 @@ static umode_t nct6683_in_is_visible(struct kobject *kobj,
 	 * but register location and encoding is unknown
 	 */
 	if ((nr == 2 || nr == 3) &&
-	    data->customer_id == NCT6683_CUSTOMER_ID_INTEL)
+	    data->customer_family == family_intel_generic)
 		return 0;
 
 	return attr->mode;
@@ -751,7 +802,7 @@ static umode_t nct6683_fan_is_visible(struct kobject *kobj,
 	 * Intel may have minimum fan speed limits,
 	 * but register location and encoding are unknown.
 	 */
-	if (nr == 2 && data->customer_id == NCT6683_CUSTOMER_ID_INTEL)
+	if (nr == 2 && data->customer_family == family_intel_generic)
 		return 0;
 
 	return attr->mode;
@@ -867,7 +918,7 @@ static umode_t nct6683_temp_is_visible(struct kobject *kobj,
 	 * registers, or at least register location and encoding is unknown.
 	 */
 	if ((nr == 2 || nr == 4) &&
-	    data->customer_id == NCT6683_CUSTOMER_ID_INTEL)
+	    data->customer_family == family_intel_generic)
 		return 0;
 
 	if (nr == 6 && get_temp_type(data->temp_src[temp]) == 0)
@@ -951,11 +1002,13 @@ static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 	if (!(data->have_pwm & (1 << pwm)))
 		return 0;
 
-	/* Only update pwm values for Mitac boards */
-	if (data->customer_id == NCT6683_CUSTOMER_ID_MITAC)
+	/* Only update pwm values if the board family supports it */
+	switch (data->customer_family) {
+	case family_mitac_generic:
 		return attr->mode | S_IWUSR;
-
-	return attr->mode;
+	default:
+		return attr->mode;
+	}
 }
 
 static struct sensor_device_template *nct6683_attributes_pwm_template[] = {
@@ -1185,6 +1238,30 @@ static void nct6683_setup_sensors(struct nct6683_data *data)
 	}
 }
 
+static inline enum customer_families customer_family_first_match(struct nct6683_data *data)
+{
+	u16 customer_id;
+	const char *board_vendor, *board_name;
+	const struct customer_family_matcher *m;
+
+	customer_id = nct6683_read16(data, NCT6683_REG_CUSTOMER_ID);
+	board_vendor = dmi_get_system_info(DMI_BOARD_VENDOR);
+	board_name = dmi_get_system_info(DMI_BOARD_NAME);
+
+	for (m = customer_family_table; m->family != family_unknown; m++) {
+		if (m->dmi_match.enabled &&
+		    !strcmp(board_vendor, m->dmi_match.board_vendor) &&
+		    !strcmp(board_name, m->dmi_match.board_name))
+			break;
+
+		if (m->customer_id_match != NCT6683_CUSTOMER_ID_UNKNOWN &&
+		    m->customer_id_match == customer_id)
+		    	break;
+	}
+
+	return m->family;
+}
+
 static int nct6683_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1210,25 +1287,13 @@ static int nct6683_probe(struct platform_device *pdev)
 	mutex_init(&data->update_lock);
 	platform_set_drvdata(pdev, data);
 
-	data->customer_id = nct6683_read16(data, NCT6683_REG_CUSTOMER_ID);
+	data->customer_family = customer_family_first_match(data);
+	pr_info("Got customer_family: %d\n", data->customer_family);
 
 	/* By default only instantiate driver if the customer ID is known */
-	switch (data->customer_id) {
-	case NCT6683_CUSTOMER_ID_INTEL:
-		break;
-	case NCT6683_CUSTOMER_ID_MITAC:
-		break;
-	case NCT6683_CUSTOMER_ID_MSI:
-		break;
-	case NCT6683_CUSTOMER_ID_ASROCK:
-		break;
-	case NCT6683_CUSTOMER_ID_ASROCK2:
-		break;
-	default:
-		if (!force)
-			return -ENODEV;
-	}
-
+	if (data->customer_family == family_unknown && !force)
+		return -ENODEV;
+	
 	nct6683_init_device(data);
 	nct6683_setup_fans(data);
 	nct6683_setup_sensors(data);
@@ -1272,7 +1337,7 @@ static int nct6683_probe(struct platform_device *pdev)
 	}
 	data->groups[groups++] = &nct6683_group_other;
 
-	if (data->customer_id == NCT6683_CUSTOMER_ID_INTEL)
+	if (data->customer_family == family_intel_generic)
 		scnprintf(build, sizeof(build), "%02x/%02x/%02x",
 			  nct6683_read(data, NCT6683_REG_BUILD_MONTH),
 			  nct6683_read(data, NCT6683_REG_BUILD_DAY),
