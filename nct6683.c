@@ -166,6 +166,7 @@ superio_exit(int ioreg)
 
 #define NCT6683_REG_FAN_MIN(x)		(0x3b8 + (x) * 2)	/* 16 bit */
 
+#define NCT6683_REG_FAN_CTRL_MODE	0xa00
 #define NCT6683_REG_FAN_CFG_CTRL	0xa01
 #define NCT6683_FAN_CFG_REQ		0x80
 #define NCT6683_FAN_CFG_DONE		0x40
@@ -388,6 +389,7 @@ struct nct6683_data {
 
 	u8 have_pwm;
 	u8 pwm[NCT6683_NUM_REG_PWM];
+	u8 pwm_enable;
 
 #ifdef CONFIG_PM
 	/* Remember extra register values over suspend/resume */
@@ -643,6 +645,8 @@ static void nct6683_update_pwm(struct device *dev)
 			continue;
 		data->pwm[i] = nct6683_read(data, NCT6683_REG_PWM(i));
 	}
+
+	data->pwm_enable = nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE);
 }
 
 static struct nct6683_data *nct6683_update_device(struct device *dev)
@@ -985,7 +989,15 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 
 	mutex_lock(&data->update_lock);
 	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_REQ);
-	usleep_range(1000, 2000);
+	switch(data->customer_family) {
+	case family_asrock_writable_pwm:
+		usleep_range(50000, 51000);
+		break;
+	case family_mitac_generic:
+	default:
+		usleep_range(1000, 2000);
+	}
+	
 	nct6683_write(data, NCT6683_REG_PWM_WRITE(index), val);
 	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_DONE);
 	mutex_unlock(&data->update_lock);
@@ -993,30 +1005,91 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	return count;
 }
 
+static ssize_t
+show_pwm_enable(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct nct6683_data *data = nct6683_update_device(dev);
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	int index = sattr->index;
+
+	return sprintf(buf, "%d\n", (data->pwm_enable >> index) & 0x01);
+}
+
+static ssize_t
+store_pwm_enable(struct device *dev, struct device_attribute *attr,
+		 const char *buf, size_t count)
+{
+	struct sensor_device_attribute_2 *sattr = to_sensor_dev_attr_2(attr);
+	struct nct6683_data *data = dev_get_drvdata(dev);
+	int index = sattr->index;
+	unsigned long val;
+	u8 bitmask;
+	u8 pwm_enable;
+
+	if (kstrtoul(buf, 10, &val) || (val != 0 && val != 1))
+		return -EINVAL;
+
+	pwm_enable = data->pwm_enable;
+	bitmask = 1 << index;
+	if (val == 1)
+		pwm_enable = pwm_enable | bitmask;
+	else
+		pwm_enable = pwm_enable & ~bitmask;
+
+	mutex_lock(&data->update_lock);
+	nct6683_write(data, NCT6683_REG_FAN_CTRL_MODE, pwm_enable);
+	mutex_unlock(&data->update_lock);
+
+	return count;
+}
+
 SENSOR_TEMPLATE(pwm, "pwm%d", S_IRUGO, show_pwm, store_pwm, 0);
+SENSOR_TEMPLATE(pwm_enable, "pwm%d_enable", S_IRUGO, show_pwm_enable,
+                store_pwm_enable, 0);
 
 static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 				      struct attribute *attr, int index)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct nct6683_data *data = dev_get_drvdata(dev);
-	int pwm = index;	/* pwm index */
+	int pwm = index / 2;	/* pwm index */
+	int nr = index % 2;	/* attribute index */
 
 	if (!(data->have_pwm & (1 << pwm)))
 		return 0;
 
-	/* Only update pwm values if the board family supports it */
-	switch (data->customer_family) {
-	case family_mitac_generic:
-	case family_asrock_writable_pwm:
-		return attr->mode | S_IWUSR;
-	default:
-		return attr->mode;
+	/* Only update pwm_enable values if the board family supports it */
+	if (nr == 1) {
+		switch (data->customer_family) {
+		case family_asrock_writable_pwm:
+			return attr->mode | S_IWUSR;
+		default:
+			return 0;
+		}
 	}
+
+	/* Only update pwm values if the board family supports it */
+	if (nr == 0) {
+		switch (data->customer_family) {
+		case family_mitac_generic:
+		case family_asrock_writable_pwm:
+			return attr->mode | S_IWUSR;
+		default:
+			return attr->mode;
+		}
+	}
+
+	return attr->mode;
 }
 
+/*
+ * nct6683_pwm_is_visible uses the index into the following array
+ * to determine if attributes should be created or not.
+ * Any change in order or content must be matched.
+ */
 static struct sensor_device_template *nct6683_attributes_pwm_template[] = {
 	&sensor_dev_template_pwm,
+	&sensor_dev_template_pwm_enable,
 	NULL
 };
 
