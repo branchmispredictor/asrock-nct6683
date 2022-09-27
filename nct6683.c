@@ -198,6 +198,7 @@ enum customer_families {
 	family_msi_generic,
 	family_asrock_generic,
 	family_asrock_generic2,
+	family_asrock_writable_pwm,
 };
 
 struct customer_family_matcher {
@@ -220,13 +221,15 @@ struct customer_family_matcher {
 		.family = _family,                                             \
 	}
 
-#define CUSTOMER_MATCHES_CUSTOMER_ID(customer_id, _family)                     \
+#define CUSTOMER_MATCHES_CUSTOMER_ID(_customer_id, _family)                    \
 	{                                                                      \
 		.customer_id_match = _customer_id,                             \
 		.family = _family,                                             \
 	}
 
 static const struct customer_family_matcher customer_family_table[] = {
+	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B550 Taichi Razer Edition",
+				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_INTEL,
 				     family_intel_generic),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_MITAC,
@@ -1005,6 +1008,7 @@ static umode_t nct6683_pwm_is_visible(struct kobject *kobj,
 	/* Only update pwm values if the board family supports it */
 	switch (data->customer_family) {
 	case family_mitac_generic:
+	case family_asrock_writable_pwm:
 		return attr->mode | S_IWUSR;
 	default:
 		return attr->mode;
