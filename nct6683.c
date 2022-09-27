@@ -41,6 +41,10 @@ static bool force;
 module_param(force, bool, 0);
 MODULE_PARM_DESC(force, "Set to one to enable support for unknown vendors");
 
+static int pwm_set_delay;
+module_param(pwm_set_delay, int, 0);
+MODULE_PARM_DESC(pwm_set_delay, "Adds a delay in usec after setting pwm values");
+
 static const char * const nct6683_device_names[] = {
 	"nct6683",
 	"nct6686",
@@ -1000,6 +1004,12 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	
 	nct6683_write(data, NCT6683_REG_PWM_WRITE(index), val);
 	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_DONE);
+	
+	if (pwm_set_delay) {
+		usleep_range(pwm_set_delay, pwm_set_delay + 1000);
+	}
+
+	data->valid = false;
 	mutex_unlock(&data->update_lock);
 
 	return count;
