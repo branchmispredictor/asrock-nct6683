@@ -1375,7 +1375,6 @@ static int nct6683_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, data);
 
 	data->customer_family = customer_family_first_match(data);
-	pr_info("Got customer_family: %d\n", data->customer_family);
 
 	/* By default only instantiate driver if the customer ID is known */
 	if (data->customer_family == family_unknown && !force)
