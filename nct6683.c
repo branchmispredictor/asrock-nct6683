@@ -182,6 +182,7 @@ superio_exit(int ioreg)
 #define NCT6683_CUSTOMER_ID_MSI		0x201
 #define NCT6683_CUSTOMER_ID_ASROCK		0xe2c
 #define NCT6683_CUSTOMER_ID_ASROCK2	0xe1b
+#define NCT6683_CUSTOMER_ID_ASROCK3	0x1633
 
 #define NCT6683_REG_BUILD_YEAR		0x604
 #define NCT6683_REG_BUILD_MONTH		0x605
@@ -235,6 +236,10 @@ struct customer_family_matcher {
 static const struct customer_family_matcher customer_family_table[] = {
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B550 Taichi Razer Edition",
 				   family_asrock_writable_pwm),
+	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B650I Lightning WiFi",
+				   family_asrock_writable_pwm),
+	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "A620I Lightning WiFi",
+				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_INTEL,
 				     family_intel_generic),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_MITAC,
@@ -245,6 +250,8 @@ static const struct customer_family_matcher customer_family_table[] = {
 				     family_asrock_generic),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK2,
 				     family_asrock_generic2),
+	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK3,
+				     family_asrock_generic),
 	{ .family = family_unknown },
 };
 
@@ -1001,10 +1008,10 @@ store_pwm(struct device *dev, struct device_attribute *attr, const char *buf,
 	default:
 		usleep_range(1000, 2000);
 	}
-	
+
 	nct6683_write(data, NCT6683_REG_PWM_WRITE(index), val);
 	nct6683_write(data, NCT6683_REG_FAN_CFG_CTRL, NCT6683_FAN_CFG_DONE);
-	
+
 	if (pwm_set_delay) {
 		usleep_range(pwm_set_delay, pwm_set_delay + 1000);
 	}
@@ -1379,7 +1386,7 @@ static int nct6683_probe(struct platform_device *pdev)
 	/* By default only instantiate driver if the customer ID is known */
 	if (data->customer_family == family_unknown && !force)
 		return -ENODEV;
-	
+
 	nct6683_init_device(data);
 	nct6683_setup_fans(data);
 	nct6683_setup_sensors(data);
