@@ -182,7 +182,6 @@ superio_exit(int ioreg)
 #define NCT6683_CUSTOMER_ID_MSI		0x201
 #define NCT6683_CUSTOMER_ID_ASROCK		0xe2c
 #define NCT6683_CUSTOMER_ID_ASROCK2	0xe1b
-#define NCT6683_CUSTOMER_ID_ASROCK3	0x1633
 
 #define NCT6683_REG_BUILD_YEAR		0x604
 #define NCT6683_REG_BUILD_MONTH		0x605
@@ -250,8 +249,6 @@ static const struct customer_family_matcher customer_family_table[] = {
 				     family_asrock_generic),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK2,
 				     family_asrock_generic2),
-	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_ASROCK3,
-				     family_asrock_generic),
 	{ .family = family_unknown },
 };
 
