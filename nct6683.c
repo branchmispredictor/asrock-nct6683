@@ -235,6 +235,8 @@ struct customer_family_matcher {
 static const struct customer_family_matcher customer_family_table[] = {
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B550 Taichi Razer Edition",
 				   family_asrock_writable_pwm),
+	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B550 Taichi",
+				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "B650I Lightning WiFi",
 				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "A620I Lightning WiFi",
