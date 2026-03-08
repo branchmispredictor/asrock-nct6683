@@ -1045,15 +1045,16 @@ store_pwm_enable(struct device *dev, struct device_attribute *attr,
 	if (kstrtoul(buf, 10, &val) || (val != 0 && val != 1))
 		return -EINVAL;
 
-	pwm_enable = data->pwm_enable;
 	bitmask = 1 << index;
+
+	mutex_lock(&data->update_lock);
+	pwm_enable = nct6683_read(data, NCT6683_REG_FAN_CTRL_MODE);
 	if (val == 1)
 		pwm_enable = pwm_enable | bitmask;
 	else
 		pwm_enable = pwm_enable & ~bitmask;
-
-	mutex_lock(&data->update_lock);
 	nct6683_write(data, NCT6683_REG_FAN_CTRL_MODE, pwm_enable);
+	data->pwm_enable = pwm_enable;
 	mutex_unlock(&data->update_lock);
 
 	return count;
