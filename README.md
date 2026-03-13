@@ -9,6 +9,7 @@ This enables tools like `lm-sensors`, `fancontrol`, `fan2go`, etc on additional 
 * ASRock B550 Taichi Razer Edition
 * ASRock B650I Lightning WiFi
 * ASRock A620I Lightning WiFi
+* ASRock X570 Creator
 
 ## Installation Instructions
 
