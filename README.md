@@ -11,6 +11,7 @@ This enables tools like `lm-sensors`, `fancontrol`, `fan2go`, etc on additional 
 * ASRock A620I Lightning WiFi
 * ASRock X570 Creator
 * ASRock X670E Steel Legend
+* ASRock Z370M Pro4
 
 ## Installation Instructions
 

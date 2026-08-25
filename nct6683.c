@@ -247,6 +247,8 @@ static const struct customer_family_matcher customer_family_table[] = {
 				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "Z890 Nova WiFi",
 				   family_asrock_writable_pwm),
+	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "Z370M Pro4",
+				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_INTEL,
 				     family_intel_generic),
 	CUSTOMER_MATCHES_CUSTOMER_ID(NCT6683_CUSTOMER_ID_MITAC,
