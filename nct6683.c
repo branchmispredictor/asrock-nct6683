@@ -243,6 +243,8 @@ static const struct customer_family_matcher customer_family_table[] = {
 				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "X570 Creator",
 				   family_asrock_writable_pwm),
+    CUSTOMER_MATCHES_DMI_BOARD("ASRock", "TRX40 Creator",
+                    family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "X670E Steel Legend",
 				   family_asrock_writable_pwm),
 	CUSTOMER_MATCHES_DMI_BOARD("ASRock", "Z890 Nova WiFi",
